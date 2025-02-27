@@ -208,7 +208,10 @@
         <h2 v-if="fileStore.req?.numDirs ?? false">
           {{ t("files.folders") }}
         </h2>
-        <div v-if="fileStore.req?.numDirs ?? false">
+        <div
+          v-if="fileStore.req?.numDirs ?? false"
+          @contextmenu="showContextMenu"
+        >
           <item
             v-for="item in dirs"
             :key="base64(item.name)"
@@ -224,8 +227,13 @@
           </item>
         </div>
 
-        <h2 v-if="fileStore.req?.numFiles ?? false">{{ t("files.files") }}</h2>
-        <div v-if="fileStore.req?.numFiles ?? false">
+        <h2 v-if="fileStore.req?.numFiles ?? false">
+          {{ t("files.files") }}
+        </h2>
+        <div
+          v-if="fileStore.req?.numFiles ?? false"
+          @contextmenu="showContextMenu"
+        >
           <item
             v-for="item in files"
             :key="base64(item.name)"
@@ -240,6 +248,53 @@
           >
           </item>
         </div>
+        <context-menu
+          :show="isContextMenuVisible"
+          :pos="contextMenuPos"
+          @hide="hideContextMenu"
+        >
+          <action
+            v-if="headerButtons.share"
+            icon="share"
+            :label="t('buttons.share')"
+            show="share"
+          />
+          <action
+            v-if="headerButtons.rename"
+            icon="mode_edit"
+            :label="t('buttons.rename')"
+            show="rename"
+          />
+          <action
+            v-if="headerButtons.copy"
+            id="copy-button"
+            icon="content_copy"
+            :label="t('buttons.copyFile')"
+            show="copy"
+          />
+          <action
+            v-if="headerButtons.move"
+            id="move-button"
+            icon="forward"
+            :label="t('buttons.moveFile')"
+            show="move"
+          />
+          <action
+            v-if="headerButtons.delete"
+            id="delete-button"
+            icon="delete"
+            :label="t('buttons.delete')"
+            show="delete"
+          />
+          <action
+            v-if="headerButtons.download"
+            icon="file_download"
+            :label="t('buttons.download')"
+            @action="download"
+            :counter="fileStore.selectedCount"
+          />
+          <action icon="info" :label="t('buttons.info')" show="info" />
+        </context-menu>
 
         <input
           style="display: none"
@@ -292,6 +347,7 @@ import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
 import Search from "@/components/Search.vue";
 import Item from "@/components/files/ListingItem.vue";
+import ContextMenu from "@/components/ContextMenu.vue";
 import {
   computed,
   inject,
@@ -310,6 +366,8 @@ const columnWidth = ref<number>(280);
 const dragCounter = ref<number>(0);
 const width = ref<number>(window.innerWidth);
 const itemWeight = ref<number>(0);
+const isContextMenuVisible = ref<boolean>(false);
+const contextMenuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 });
 
 const $showError = inject<IToastError>("$showError")!;
 
@@ -444,7 +502,7 @@ watch(req, () => {
 
 onMounted(() => {
   // Check the columns size for the first time.
-  colunmsResize();
+  columnsResize();
 
   // How much every listing item affects the window height
   setItemWeight();
@@ -523,12 +581,12 @@ const keyEvent = (event: KeyboardEvent) => {
       break;
     case "a":
       event.preventDefault();
-      for (let file of items.value.files) {
+      for (const file of items.value.files) {
         if (fileStore.selected.indexOf(file.index) === -1) {
           fileStore.selected.push(file.index);
         }
       }
-      for (let dir of items.value.dirs) {
+      for (const dir of items.value.dirs) {
         if (fileStore.selected.indexOf(dir.index) === -1) {
           fileStore.selected.push(dir.index);
         }
@@ -551,9 +609,9 @@ const copyCut = (event: Event | KeyboardEvent): void => {
 
   if (fileStore.req === null) return;
 
-  let items = [];
+  const items = [];
 
-  for (let i of fileStore.selected) {
+  for (const i of fileStore.selected) {
     items.push({
       from: fileStore.req.items[i].url,
       name: fileStore.req.items[i].name,
@@ -575,9 +633,9 @@ const paste = (event: Event) => {
   if ((event.target as HTMLElement).tagName?.toLowerCase() === "input") return;
 
   // TODO router location should it be
-  let items: any[] = [];
+  const items: any[] = [];
 
-  for (let item of clipboardStore.items) {
+  for (const item of clipboardStore.items) {
     const from = item.from.endsWith("/") ? item.from.slice(0, -1) : item.from;
     const to = route.path + encodeURIComponent(item.name);
     items.push({ from, to, name: item.name });
@@ -614,7 +672,7 @@ const paste = (event: Event) => {
     return;
   }
 
-  let conflict = upload.checkConflict(items, fileStore.req!.items);
+  const conflict = upload.checkConflict(items, fileStore.req!.items);
 
   let overwrite = false;
   let rename = false;
@@ -638,16 +696,15 @@ const paste = (event: Event) => {
   action(overwrite, rename);
 };
 
-const colunmsResize = () => {
+const columnsResize = () => {
   // Update the columns size based on the window width.
-  let items_ = css(["#listing.mosaic .item", ".mosaic#listing .item"]);
+  const items_ = css(["#listing.mosaic .item", ".mosaic#listing .item"]);
   if (items_ === null) return;
 
   let columns = Math.floor(
     (document.querySelector("main")?.offsetWidth ?? 0) / columnWidth.value
   );
   if (columns === 0) columns = 1;
-  // @ts-ignore never type error
   items_.style.width = `calc(${100 / columns}% - 1em)`;
 };
 
@@ -677,11 +734,10 @@ const dragEnter = () => {
 
   // When the user starts dragging an item, put every
   // file on the listing with 50% opacity.
-  let items = document.getElementsByClassName("item");
+  const items = document.getElementsByClassName("item");
 
-  // @ts-ignore
-  Array.from(items).forEach((file: HTMLElement) => {
-    file.style.opacity = "0.5";
+  Array.from(items).forEach((file: Element) => {
+    (file as HTMLElement).style.opacity = "0.5";
   });
 };
 
@@ -698,7 +754,7 @@ const drop = async (event: DragEvent) => {
   dragCounter.value = 0;
   resetOpacity();
 
-  let dt = event.dataTransfer;
+  const dt = event.dataTransfer;
   let el: HTMLElement | null = event.target as HTMLElement;
 
   if (fileStore.req === null || dt === null || dt.files.length <= 0) return;
@@ -709,7 +765,7 @@ const drop = async (event: DragEvent) => {
     }
   }
 
-  let files: UploadList = (await upload.scanFiles(dt)) as UploadList;
+  const files: UploadList = (await upload.scanFiles(dt)) as UploadList;
   let items = fileStore.req.items;
   let path = route.path.endsWith("/") ? route.path : route.path + "/";
 
@@ -729,7 +785,7 @@ const drop = async (event: DragEvent) => {
     }
   }
 
-  let conflict = upload.checkConflict(files, items);
+  const conflict = upload.checkConflict(files, items);
 
   if (conflict) {
     layoutStore.showHover({
@@ -753,12 +809,10 @@ const drop = async (event: DragEvent) => {
 };
 
 const uploadInput = (event: Event) => {
-  layoutStore.closeHovers();
-
-  let files = (event.currentTarget as HTMLInputElement)?.files;
+  const files = (event.currentTarget as HTMLInputElement)?.files;
   if (files === null) return;
 
-  let folder_upload = !!files[0].webkitRelativePath;
+  const folder_upload = !!files[0].webkitRelativePath;
 
   const uploadFiles: UploadList = [];
   for (let i = 0; i < files.length; i++) {
@@ -773,8 +827,8 @@ const uploadInput = (event: Event) => {
     });
   }
 
-  let path = route.path.endsWith("/") ? route.path : route.path + "/";
-  let conflict = upload.checkConflict(uploadFiles, fileStore.req!.items);
+  const path = route.path.endsWith("/") ? route.path : route.path + "/";
+  const conflict = upload.checkConflict(uploadFiles, fileStore.req!.items);
 
   if (conflict) {
     layoutStore.showHover({
@@ -798,7 +852,7 @@ const uploadInput = (event: Event) => {
 };
 
 const resetOpacity = () => {
-  let items = document.getElementsByClassName("item");
+  const items = document.getElementsByClassName("item");
 
   Array.from(items).forEach((file: Element) => {
     (file as HTMLElement).style.opacity = "1";
@@ -824,7 +878,6 @@ const sort = async (by: string) => {
 
   try {
     if (authStore.user?.id) {
-      // @ts-ignore
       await users.update({ id: authStore.user?.id, sorting: { by, asc } }, [
         "sorting",
       ]);
@@ -846,7 +899,7 @@ const toggleMultipleSelection = () => {
 };
 
 const windowsResize = throttle(() => {
-  colunmsResize();
+  columnsResize();
   width.value = window.innerWidth;
 
   // Listing element is not displayed
@@ -875,10 +928,10 @@ const download = () => {
     confirm: (format: any) => {
       layoutStore.closeHovers();
 
-      let files = [];
+      const files = [];
 
       if (fileStore.selectedCount > 0 && fileStore.req !== null) {
-        for (let i of fileStore.selected) {
+        for (const i of fileStore.selected) {
           files.push(fileStore.req.items[i].url);
         }
       } else {
@@ -901,13 +954,12 @@ const switchView = async () => {
 
   const data = {
     id: authStore.user?.id,
-    viewMode: modes[authStore.user?.viewMode ?? "list"] || "list",
+    viewMode: (modes[authStore.user?.viewMode ?? "list"] ||
+      "list") as ViewModeType,
   };
 
-  // @ts-ignore
   users.update(data, ["viewMode"]).catch($showError);
 
-  // @ts-ignore
   authStore.updateUser(data);
 
   setItemWeight();
@@ -956,5 +1008,18 @@ const fillWindow = (fit = false) => {
 
   // Set the number of displayed items
   showLimit.value = showQuantity > totalItems ? totalItems : showQuantity;
+};
+
+const showContextMenu = (event: MouseEvent) => {
+  event.preventDefault();
+  isContextMenuVisible.value = true;
+  contextMenuPos.value = {
+    x: event.clientX + 8,
+    y: event.clientY + Math.floor(window.scrollY),
+  };
+};
+
+const hideContextMenu = () => {
+  isContextMenuVisible.value = false;
 };
 </script>

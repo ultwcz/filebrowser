@@ -8,6 +8,7 @@
     @dragover="dragOver"
     @drop="drop"
     @click="itemClick"
+    @contextmenu="contextMenu"
     :data-dir="isDir"
     :data-type="type"
     :aria-label="name"
@@ -82,7 +83,7 @@ const isDraggable = computed(
 const canDrop = computed(() => {
   if (!props.isDir || props.readOnly) return false;
 
-  for (let i of fileStore.selected) {
+  for (const i of fileStore.selected) {
     if (fileStore.req?.items[i].url === props.url) {
       return false;
     }
@@ -156,9 +157,9 @@ const drop = async (event: Event) => {
     }
   }
 
-  let items: any[] = [];
+  const items: any[] = [];
 
-  for (let i of fileStore.selected) {
+  for (const i of fileStore.selected) {
     if (fileStore.req) {
       items.push({
         from: fileStore.req?.items[i].url,
@@ -172,10 +173,10 @@ const drop = async (event: Event) => {
   if (el === null) {
     return;
   }
-  let path = el.__vue__.url;
-  let baseItems = (await api.fetch(path)).items;
+  const path = el.__vue__.url;
+  const baseItems = (await api.fetch(path)).items;
 
-  let action = (overwrite: boolean, rename: boolean) => {
+  const action = (overwrite: boolean, rename: boolean) => {
     api
       .move(items, overwrite, rename)
       .then(() => {
@@ -184,7 +185,7 @@ const drop = async (event: Event) => {
       .catch($showError);
   };
 
-  let conflict = upload.checkConflict(items, baseItems);
+  const conflict = upload.checkConflict(items, baseItems);
 
   let overwrite = false;
   let rename = false;
@@ -218,6 +219,17 @@ const itemClick = (event: Event | KeyboardEvent) => {
   )
     open();
   else click(event);
+};
+
+const contextMenu = (event: MouseEvent) => {
+  event.preventDefault();
+  if (
+    fileStore.selected.length === 0 ||
+    event.ctrlKey ||
+    fileStore.selected.indexOf(props.index) === -1
+  ) {
+    click(event);
+  }
 };
 
 const click = (event: Event | KeyboardEvent) => {
